@@ -1,6 +1,6 @@
 <div align="center">
 
-> **This is [KhangHLe's fork](https://github.com/KhangHLe/glazewm)** — upstream GlazeWM plus features built here (and upstream PRs merged early). See [Fork features](#fork-features) below. Install via the fork's [releases](https://github.com/KhangHLe/glazewm/releases).
+> **This is [DavidRaveloU's fork](https://github.com/DavidRaveloU/glazewm)** — upstream GlazeWM, built on [KhangHLe's fork](https://github.com/KhangHLe/glazewm) (see [Credits](#credits)), plus features and fixes built here. See [Fork features](#fork-features) below.
 
 > V3 is finally out - check out the changelog [here](https://github.com/glzr-io/GlazeWM/releases) 🔥
 
@@ -62,6 +62,10 @@ Everything below is on top of upstream, config-compatible (all additions are opt
 - **Focused-above-unfocused topmost fix** — only the workspace's focused window is raised within the always-on-top band, fixing z-order flicker between shown-on-top floats.
 
 - **Drag-drop tree fix** — drop targets are resolved after the tiling conversion mutates the container tree, fixing "No common ancestor" errors + orphaned windows on drops with no re-tile target (submitted upstream).
+
+## Credits
+
+This fork is built on [KhangHLe/glazewm](https://github.com/KhangHLe/glazewm), a fork of [glzr-io/glazewm](https://github.com/glzr-io/glazewm) — thanks for the foundation and the features this tree keeps ([Fork features](#fork-features)).
 
 ## Installation
 
