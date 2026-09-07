@@ -185,8 +185,13 @@ fn sync_focus(
 /// Finds windows that should be brought to the top of their workspace's
 /// z-order.
 ///
-/// Windows are brought to front if they match the focused window's state
-/// (floating/tiling) and any of these conditions are met:
+/// Tiling windows are brought to front as a layer when the focused window
+/// is tiling, since they share a layout and never overlap each other.
+/// Floating windows are raised individually, so that activating one
+/// floating window (e.g. via Alt+Tab) doesn't pull the rest of the floating
+/// layer to the front along with it.
+///
+/// Windows are brought to front when any of these conditions are met:
 ///  * Focus has changed to a different window.
 ///  * Focused window's state has changed (e.g. tiling -> floating).
 ///  * Focused window has moved to a different workspace.
@@ -220,6 +225,17 @@ fn windows_to_bring_to_front(
         .and_then(|container| container.as_window_container().ok());
 
       match focused_descendant {
+        // Only raise a focused floating window by itself. Raising the whole
+        // floating layer would push tiling windows to the back whenever any
+        // single floating window is activated.
+        Some(focused_descendant)
+          if matches!(
+            focused_descendant.state(),
+            WindowState::Floating(_)
+          ) =>
+        {
+          vec![focused_descendant]
+        }
         Some(focused_descendant) => workspace
           .descendants()
           .filter_map(|descendant| descendant.as_window_container().ok())
@@ -1605,4 +1621,145 @@ fn apply_transparency_effect(
   };
 
   _ = window.native().set_transparency(transparency);
+}
+
+#[cfg(test)]
+mod tests {
+  use tokio::sync::mpsc;
+  use wm_platform::Dispatcher;
+
+  use super::windows_to_bring_to_front;
+  use crate::{
+    commands::container::{attach_container, set_focused_descendant},
+    models::{
+      Monitor, NonTilingWindow, SplitContainer, TilingWindow,
+      WindowContainer, Workspace,
+    },
+    traits::{CommonGetters, WindowGetters},
+    wm_state::WmState,
+  };
+
+  /// Creates a `WmState` with a single monitor whose single workspace is
+  /// populated with two tiling windows and two floating windows.
+  ///
+  /// Returns the state together with the workspace contained in it.
+  fn mock_state_with_workspace() -> (WmState, Workspace) {
+    let (event_tx, _) = mpsc::unbounded_channel();
+    let (exit_tx, _) = mpsc::unbounded_channel();
+    let (animation_tx, _) = mpsc::unbounded_channel();
+    let state =
+      WmState::new(Dispatcher::mock(), event_tx, exit_tx, animation_tx);
+
+    let split = SplitContainer::mock()
+      .tiling_containers(vec![
+        TilingWindow::mock()
+          .title("tiling_1".to_string())
+          .call()
+          .into(),
+        TilingWindow::mock()
+          .title("tiling_2".to_string())
+          .call()
+          .into(),
+      ])
+      .call();
+
+    let workspace = Workspace::mock()
+      .tiling_containers(vec![split.into()])
+      .non_tiling_windows(vec![
+        NonTilingWindow::mock()
+          .title("floating_1".to_string())
+          .call(),
+        NonTilingWindow::mock()
+          .title("floating_2".to_string())
+          .call(),
+      ])
+      .call();
+
+    let monitor =
+      Monitor::mock().workspaces(vec![workspace]).call();
+    attach_container(
+      &monitor.into(),
+      &state.root_container.clone().into(),
+      None,
+    )
+    .unwrap();
+
+    let workspace = state.workspaces().pop().unwrap();
+    (state, workspace)
+  }
+
+  fn window_by_title(
+    workspace: &Workspace,
+    title: &str,
+  ) -> WindowContainer {
+    workspace
+      .descendants()
+      .find_map(|descendant| {
+        let window = descendant.as_window_container().ok()?;
+        (window.native_properties().title == title).then_some(window)
+      })
+      .unwrap()
+  }
+
+  #[test]
+  fn only_focused_floating_window_is_brought_to_front() {
+    let (mut state, workspace) = mock_state_with_workspace();
+
+    let focused_window = window_by_title(&workspace, "floating_1");
+    set_focused_descendant(&focused_window.clone().into(), None);
+    state.pending_sync.queue_workspace_to_reorder(workspace);
+
+    let windows = windows_to_bring_to_front(
+      &focused_window.clone().into(),
+      &state,
+    )
+    .unwrap();
+
+    assert_eq!(windows.len(), 1);
+    assert_eq!(windows[0].id(), focused_window.id());
+  }
+
+  #[test]
+  fn all_tiling_windows_are_brought_to_front() {
+    let (mut state, workspace) = mock_state_with_workspace();
+
+    let focused_window = window_by_title(&workspace, "tiling_1");
+    set_focused_descendant(&focused_window.clone().into(), None);
+    state.pending_sync.queue_workspace_to_reorder(workspace);
+
+    let windows = windows_to_bring_to_front(
+      &focused_window.clone().into(),
+      &state,
+    )
+    .unwrap();
+
+    let mut window_titles = windows
+      .iter()
+      .map(|window| window.native_properties().title.clone())
+      .collect::<Vec<_>>();
+    window_titles.sort();
+
+    assert_eq!(window_titles, vec!["tiling_1", "tiling_2"]);
+  }
+
+  #[test]
+  fn floating_window_bring_to_front_includes_no_tiling_windows() {
+    let (mut state, workspace) = mock_state_with_workspace();
+
+    let focused_window = window_by_title(&workspace, "floating_2");
+    set_focused_descendant(&focused_window.clone().into(), None);
+    state.pending_sync.queue_workspace_to_reorder(workspace);
+
+    let windows = windows_to_bring_to_front(
+      &focused_window.clone().into(),
+      &state,
+    )
+    .unwrap();
+
+    assert!(windows
+      .iter()
+      .all(|window| window.native_properties()
+        .title
+        .starts_with("floating_")));
+  }
 }
