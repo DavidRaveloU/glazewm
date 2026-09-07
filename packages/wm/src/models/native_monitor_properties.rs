@@ -6,6 +6,8 @@ use wm_platform::{DisplayDeviceExtWindows, DisplayExtWindows};
 pub struct NativeMonitorProperties {
   #[cfg(target_os = "macos")]
   pub device_uuid: String,
+  #[cfg(target_os = "macos")]
+  pub handle: isize,
   #[cfg(target_os = "windows")]
   pub handle: isize,
   #[cfg(target_os = "windows")]
@@ -27,6 +29,8 @@ impl NativeMonitorProperties {
     Ok(Self {
       #[cfg(target_os = "macos")]
       device_uuid: display_device.id().0,
+      #[cfg(target_os = "macos")]
+      handle: native_display.id().0 as isize,
       #[cfg(target_os = "windows")]
       handle: native_display.hmonitor().0,
       #[cfg(target_os = "windows")]

@@ -225,6 +225,14 @@ impl NativeWindow {
     })?
   }
 
+  /// Implements [`NativeWindow::mark_fullscreen`].
+  pub(crate) fn mark_fullscreen(&self, fullscreen: bool) -> crate::Result<()> {
+    self.element.with(move |el| -> crate::Result<()> {
+      let ax_bool = CFBoolean::new(fullscreen);
+      el.set_attribute::<CFBoolean>("AXFullScreen", &ax_bool.into())
+    })?
+  }
+
   /// Implements [`NativeWindow::focus`].
   pub(crate) fn focus(&self) -> crate::Result<()> {
     let psn = self.application.psn()?;

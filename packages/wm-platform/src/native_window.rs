@@ -605,6 +605,17 @@ impl NativeWindow {
     self.inner.maximize()
   }
 
+  /// Marks the window as fullscreen (or exits fullscreen).
+  ///
+  /// # Platform-specific
+  ///
+  /// - **Windows**: Causes the native taskbar to be moved to the bottom of
+  ///   the z-order when this window is active.
+  /// - **macOS**: Sets the `AXFullScreen` attribute on the window.
+  pub fn mark_fullscreen(&self, fullscreen: bool) -> crate::Result<()> {
+    self.inner.mark_fullscreen(fullscreen)
+  }
+
   /// Sets focus to the window and raises it to the top of the z-order.
   pub fn focus(&self) -> crate::Result<()> {
     self.inner.focus()

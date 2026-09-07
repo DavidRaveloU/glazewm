@@ -855,6 +855,7 @@ fn redraw_containers(
         cycle_has_resize,
         target_rect.clone(),
         previous_target,
+        &*window.native(),
         u8::MAX,
         config,
       )
