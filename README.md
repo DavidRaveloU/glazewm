@@ -63,34 +63,65 @@ Everything below is on top of upstream, config-compatible (all additions are opt
 
 - **Drag-drop tree fix** — drop targets are resolved after the tiling conversion mutates the container tree, fixing "No common ancestor" errors + orphaned windows on drops with no re-tile target (submitted upstream).
 
+## Animations
+
+An `animations:` block in config — a **fork feature** (a continuation of upstream [PR #1392](https://github.com/glzr-io/glazewm/pull/1392) by @florensm, building on @sagezaugg's #1199; **not present** in `glzr-io/glazewm`). Every entry is optional; each can be disabled with `enabled: false`.
+
+| Key | Default | What it animates |
+|---|---|---|
+| `window_move` | on, 150 ms | pure position changes |
+| `window_resize` | on, 150 ms | size changes (siblings stay in lock-step) |
+| `window_open` | on, 150 ms | new-window entry — `style: slide_*` / `fade` / `zoom` |
+| `workspace_switch` | on, 250 ms | workspace transitions — `style: slide` / `fade` / `zoom` / `iris` |
+| `window_close` | on, 150 ms | window exit — `style: fade` / `zoom` / `slide_*` + `opacity_to` |
+| `focus_change` | off | focused-window pop (`style: opacity` / `scale`) |
+
+**Easing** accepts CSS cubic beziers `cubic_bezier(x1, y1, x2, y2)`, named aliases (`ease_in`, `ease_out`, `ease_in_out`, `..._cubic`), or the spring `ease_out_spring`. Curves with `y1`/`y2` outside `[0, 1]` **overshoot** past the target and settle back — the "Hyprland-style bounce" — and run to their full duration. Opacity values are clamped, so overshoot is safe in fades too.
+
+```yaml
+animations:
+  window_move:
+    enabled: true
+    duration_ms: 150
+    easing: "cubic_bezier(0.05, 0.9, 0.1, 1.05)"   # snappy start + subtle overshoot (Hyprland default curve)
+  window_resize:
+    enabled: true
+    duration_ms: 150
+    easing: "cubic_bezier(0.05, 0.9, 0.1, 1.05)"
+  window_open:
+    enabled: true
+    style: "zoom"                       # pop from window center (Hyprland-style `popin`)
+    opacity_from: 1.0
+  workspace_switch:
+    enabled: true
+    duration_ms: 250
+    style: "slide"
+    direction: "horizontal"
+    easing: "cubic_bezier(0.05, 0.9, 0.1, 1.05)"
+    opacity_outgoing: 0.85              # subtle slide-fade (Hyprland `slidefade`)
+    opacity_incoming: 0.85
+    zoom_factor: 0.1                    # workspaces scale slightly on exit/entry
+  window_close:
+    enabled: true
+    style: "zoom"                       # shrink toward center + fade out
+    opacity_to: 0.0
+```
+
+`window_move`/`window_resize` take a `threshold_px` to ignore sub-pixel nudges. `workspace_switch` additionally offers `iris` (incoming workspace revealed through a circular hole growing from `iris_origin` — `center`/`cursor`/`focused_window`). Full reference is in [sample-config.yaml](./resources/assets/sample-config.yaml).
+
 ## Credits
 
 This fork is built on [KhangHLe/glazewm](https://github.com/KhangHLe/glazewm), a fork of [glzr-io/glazewm](https://github.com/glzr-io/glazewm) — thanks for the foundation and the features this tree keeps ([Fork features](#fork-features)).
 
 ## Installation
 
-**The latest version of GlazeWM is downloadable via [releases](https://github.com/glzr-io/GlazeWM/releases).** Zebar can optionally be installed as well via a checkbox during installation.
+**The latest version of GlazeWM for Windows is downloadable via [releases](https://github.com/DavidRaveloU/glazewm/releases).**
 
-GlazeWM is also available through several package managers:
+Choose `installer-universal-x64.exe` (universal, GlazeWM + optional Zebar) or `installer-x64.msi` (standalone). Zebar can optionally be installed as well via a checkbox during installation.
 
-**Winget**
+> This installer is built **from this repository's own `main` branch** — it contains the fork features and fixes listed above. Anyone using it should report issues in [this repository's issue tracker](https://github.com/DavidRaveloU/glazewm/issues), **not** upstream (glzr-io/glazewm), since the upstream author won't be able to reproduce these builds.
 
-```sh
-winget install GlazeWM
-```
-
-**Chocolatey**
-
-```sh
-choco install glazewm
-```
-
-**Scoop**
-
-```sh
-scoop bucket add extras
-scoop install extras/glazewm
-```
+This fork is **not** published to package managers (winget, chocolatey, scoop) — install via the installer above only.
 
 ## Contributing
 
@@ -108,7 +139,7 @@ Below is a cheat sheet of all available commands and their default keybindings.
 
 ## Config documentation
 
-The [default config](https://github.com/glzr-io/glazewm/blob/main/resources/assets/sample-config.yaml) file is generated at `%userprofile%\.glzr\glazewm\config.yaml`.
+The [default config](https://github.com/DavidRaveloU/glazewm/blob/main/resources/assets/sample-config.yaml) file is generated at `%userprofile%\.glzr\glazewm\config.yaml`.
 
 To use a different config file location, you can launch the GlazeWM executable with the CLI argument `--config="..."`, like so:
 
