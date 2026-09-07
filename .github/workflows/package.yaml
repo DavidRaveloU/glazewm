@@ -7,18 +7,30 @@ on:
         type: string
         default: 0.0.0
         description: Version number to use for the build (e.g. `1.0.0`).
+      enable_ui_access:
+        type: boolean
+        default: false
+        description: >-
+          (Windows only) Enable UIAccess in the application manifest.
+          Requires a signed binary; keep `false` for unsigned builds.
   workflow_dispatch:
     inputs:
       version_number:
         type: string
         default: 0.0.0
         description: Version number to use for the build (e.g. `1.0.0`).
+      enable_ui_access:
+        type: boolean
+        default: false
+        description: >-
+          (Windows only) Enable UIAccess in the application manifest.
+          Requires a signed binary; keep `false` for unsigned builds.
 
 jobs:
   build:
     uses: ./.github/workflows/build.yaml
     with:
-      enable_ui_access: true
+      enable_ui_access: ${{ inputs.enable_ui_access }}
       version_number: ${{ inputs.version_number }}
 
   package-windows:
@@ -40,20 +52,14 @@ jobs:
           dotnet tool install --global wix --version 5.0.0
           wix extension add WixToolset.UI.wixext/5 WixToolset.Util.wixext/5 WixToolset.BootstrapperApplications.wixext/5
 
-      - name: Install AzureSignTool
-        run: |
-          dotnet tool install --global AzureSignTool --version 5.0.0
-
+      # Fork builds are unsigned: AzureSignTool and the Azure signing secrets
+      # are intentionally omitted. package.ps1's SignFiles step skips when the
+      # tool or the secrets are absent, so the installers are produced unsigned.
       - name: Run packaging script
         env:
-          AZ_VAULT_URL: ${{ secrets.AZ_VAULT_URL }}
-          AZ_CERT_NAME: ${{ secrets.AZ_CERT_NAME }}
-          AZ_CLIENT_ID: ${{ secrets.AZ_CLIENT_ID }}
-          AZ_CLIENT_SECRET: ${{ secrets.AZ_CLIENT_SECRET }}
-          AZ_TENANT_ID: ${{ secrets.AZ_TENANT_ID }}
-          RFC3161_TIMESTAMP_URL: ${{ vars.RFC3161_TIMESTAMP_URL }}
+          VERSION_NUMBER: ${{ inputs.version_number }}
         run: |
-          ./resources/scripts/package.ps1 -VersionNumber $env:VERSION
+          ./resources/scripts/package.ps1 -VersionNumber $env:VERSION_NUMBER
 
       - uses: actions/upload-artifact@v6
         with:
@@ -75,6 +81,9 @@ jobs:
           pattern: build-*
           merge-multiple: true
 
+      # Unsigned fork builds: no Apple certificate import, no codesign, no
+      # notarization. The DMG below is produced with best-effort for testing;
+      # macOS will warn "unidentified developer" (bypass with right-click -> Open).
       - name: Create universal binaries
         run: |
           mkdir temp
@@ -84,45 +93,6 @@ jobs:
               "target/aarch64-apple-darwin/release/$binary" \
               -output "temp/$binary"
             chmod +x "temp/$binary"
-          done
-
-      - name: Import signing certificate
-        env:
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-        run: |
-          # Create a temporary keychain.
-          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
-          KEYCHAIN_PASSWORD=$(openssl rand -base64 32)
-
-          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-
-          # Import the certificate.
-          echo "$APPLE_CERTIFICATE" | base64 --decode > $RUNNER_TEMP/certificate.p12
-          security import $RUNNER_TEMP/certificate.p12 \
-            -P "$APPLE_CERTIFICATE_PASSWORD" \
-            -A \
-            -t cert \
-            -f pkcs12 \
-            -k "$KEYCHAIN_PATH"
-
-          security list-keychain -d user -s "$KEYCHAIN_PATH"
-
-          # Store the keychain path for later steps.
-          echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> $GITHUB_ENV
-
-      # Make sure to sign the binaries before they're copied into the app bundle.
-      - name: Sign universal binaries
-        env:
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-        run: |
-          for binary in glazewm glazewm-cli; do
-            codesign --force --options runtime --timestamp \
-              --sign "$APPLE_SIGNING_IDENTITY" \
-              "temp/$binary"
-            codesign --verify --verbose=2 "temp/$binary"
           done
 
       - name: Convert icon to ICNS
@@ -156,16 +126,7 @@ jobs:
 
           echo -n "APPL????" > "$CONTENTS_DIR/PkgInfo"
 
-      - name: Sign app bundle
-        env:
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-        run: |
-          codesign --force --options runtime --timestamp \
-            --sign "$APPLE_SIGNING_IDENTITY" \
-            temp/GlazeWM.app
-          codesign --verify --verbose=2 --deep --strict temp/GlazeWM.app
-
-      - name: Create DMG
+      - name: Create DMG (unsigned)
         run: |
           DMG_DIR="temp/dmg-contents"
           mkdir -p $DMG_DIR
@@ -179,30 +140,6 @@ jobs:
             -srcfolder $DMG_DIR \
             -ov -format UDZO \
             installer-universal.dmg
-
-      - name: Sign DMG
-        env:
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-        run: |
-          codesign --force --timestamp \
-            --sign "$APPLE_SIGNING_IDENTITY" \
-            installer-universal.dmg
-
-      - name: Notarize DMG
-        env:
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: |
-          # Submit for notarization.
-          xcrun notarytool submit installer-universal.dmg \
-            --apple-id "$APPLE_ID" \
-            --password "$APPLE_ID_PASSWORD" \
-            --team-id "$APPLE_TEAM_ID" \
-            --wait
-
-          # Staple the notarization ticket to the DMG.
-          xcrun stapler staple installer-universal.dmg
 
       - name: Upload DMG
         uses: actions/upload-artifact@v6
