@@ -30,6 +30,7 @@ use crate::{
   user_config::UserConfig,
 };
 
+#[allow(clippy::struct_excessive_bools)]
 pub struct WmState {
   /// Root node of the container tree. Monitors are the children of the
   /// root node, followed by workspaces, then split containers/windows.

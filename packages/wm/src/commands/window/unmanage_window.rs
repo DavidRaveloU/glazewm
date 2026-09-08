@@ -35,8 +35,7 @@ fn restore_focus_target(
     restore_target,
     focus_target
       .as_ref()
-      .map(|target| target.id().to_string())
-      .unwrap_or_else(|| "none".to_string()),
+      .map_or_else(|| "none".to_string(), |target| target.id().to_string()),
   );
 
   focus_target
