@@ -1,4 +1,5 @@
-<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs" xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+  xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui" xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
   <Package
     Name="GlazeWM"
     Version="$(var.VERSION_NUMBER)"
@@ -7,6 +8,44 @@
     Language="1033"
     Scope="perMachine"
   >
+    <!--
+      Disable the Restart Manager. When enabled, RM tries to gracefully close
+      the running WM and watcher during `InstallValidate`, which always shows
+      the error 1611 dialog ("The setup was unable to automatically close all
+      requested applications") because the watcher has no top-level window to
+      receive WM_CLOSE. With "Disable", Windows Installer skips RM entirely.
+      Note: "0" is the default value and means "use the Restart Manager".
+      Ref: https://learn.microsoft.com/en-us/windows/win32/msi/msirestartmanagercontrol
+    -->
+    <Property Id="MSIRESTARTMANAGERCONTROL" Value="Disable" Secure="yes" />
+
+    <!--
+      Kill the running WM and watcher in the execution sequence, before
+      `InstallValidate`. The watcher must be killed FIRST while it's in a
+      settled state; killing glazewm first makes the watcher start exiting
+      (its IPC connection dies) and taskkill then fails against it with
+      access denied, leaving the watcher executable locked.
+    -->
+    <CustomAction Id="Custom_KillRunningProcesses_SetCmd"
+      Property="WixQuietExecCmdLine"
+      Value="&quot;[System64Folder]cmd.exe&quot; /c &quot;taskkill /f /im glazewm-watcher.exe &gt;nul 2&gt;&amp;1 &amp; taskkill /f /im glazewm.exe &gt;nul 2&gt;&amp;1&quot;" />
+    <CustomAction Id="Custom_KillRunningProcesses_Run"
+      BinaryRef="Wix4UtilCA_$(sys.BUILDARCHSHORT)" DllEntry="WixQuietExec"
+      Execute="immediate" Return="ignore" />
+
+    <InstallExecuteSequence>
+      <Custom Action="Custom_KillRunningProcesses_SetCmd" Before="InstallValidate" />
+      <Custom Action="Custom_KillRunningProcesses_Run" After="Custom_KillRunningProcesses_SetCmd" />
+    </InstallExecuteSequence>
+
+    <!-- Terminate the running WM and watcher during the execution sequence,
+         before their executables are replaced (also covers silent installs,
+         where the UI sequence doesn't run). -->
+    <util:CloseApplication Id="Custom_CloseGlazeWM" Target="glazewm.exe"
+      CloseMessage="no" TerminateProcess="1" RebootPrompt="no" />
+    <util:CloseApplication Id="Custom_CloseWatcher" Target="glazewm-watcher.exe"
+      CloseMessage="no" TerminateProcess="1" RebootPrompt="no" />
+
     <!--
       Reinstall all files; rewrite all registry entries; reinstall all shortcuts.
       Ref: https://docs.microsoft.com/en-us/windows/win32/msi/reinstallmode

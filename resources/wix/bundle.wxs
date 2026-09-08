@@ -1,7 +1,8 @@
 <Wix
   xmlns="http://wixtoolset.org/schemas/v4/wxs"
   xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui"
-  xmlns:bal="http://wixtoolset.org/schemas/v4/wxs/bal">
+  xmlns:bal="http://wixtoolset.org/schemas/v4/wxs/bal"
+  xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
   <Bundle Name="GlazeWM" Version="$(var.VERSION_NUMBER)"
     UpgradeCode="f57adff3-4521-4a6b-87b1-d34a7d9bae1e"
     Manufacturer="Glzr Software Pte. Ltd."
@@ -18,6 +19,13 @@
         SuppressOptionsUI="yes"
         ShowVersion="yes" />
     </BootstrapperApplication>
+
+    <!-- Terminate the running WM and watcher before updating, so their
+         executables aren't locked in use. -->
+    <util:CloseApplication Id="Custom_CloseGlazeWM" Target="glazewm.exe"
+      CloseMessage="no" TerminateProcess="1" RebootPrompt="no" />
+    <util:CloseApplication Id="Custom_CloseWatcher" Target="glazewm-watcher.exe"
+      CloseMessage="no" TerminateProcess="1" RebootPrompt="no" />
 
     <!-- User input variable for whether to install GlazeWM and Zebar. -->
     <Variable Name="Custom_InstallGlazeWM" Type="numeric" Value="1" bal:Overridable="yes" />

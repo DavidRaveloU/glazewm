@@ -1,7 +1,14 @@
 # Usage: ./resources/scripts/package.ps1 -VersionNumber 1.0.0
 param(
   [Parameter(Mandatory=$true)]
-  [string]$VersionNumber
+  [string]$VersionNumber,
+
+  # Skip arm64 builds (requires the "MSVC ARM64 build tools" VS component).
+  [switch]$SkipArm64,
+
+  # Build without the `ui_access` feature. Needed for local unsigned test
+  # builds, since `uiAccess="true"` executables must be signed to launch.
+  [switch]$NoUiAccess
 )
 
 function ExitOnError() {
@@ -72,7 +79,11 @@ function DownloadZebarInstallers() {
 
 function BuildExes() {
   # Rust targets to build for (x64 and arm64).
-  $rustTargets = @("x86_64-pc-windows-msvc", "aarch64-pc-windows-msvc")
+  $rustTargets = if ($SkipArm64) {
+    @("x86_64-pc-windows-msvc")
+  } else {
+    @("x86_64-pc-windows-msvc", "aarch64-pc-windows-msvc")
+  }
 
   # Set the version number as an environment variable for `cargo build`.
   $env:VERSION_NUMBER = $VersionNumber
@@ -88,7 +99,17 @@ function BuildExes() {
     if (($sourcePaths | Where-Object { !(Test-Path $_) }).Count -gt 0) {
       Write-Output "Build artifact not found for target '$target'. Building now..."
 
-      cargo build --locked --release --target $target --features ui_access
+      # The workspace's `default-members` exclude `wm-watcher`, so it must
+      # be built explicitly. It is built separately since it doesn't define
+      # the `ui_access` feature.
+      if ($NoUiAccess) {
+        cargo build --locked --release --target $target -p wm -p wm-cli
+      } else {
+        cargo build --locked --release --target $target --features ui_access -p wm -p wm-cli
+      }
+      ExitOnError
+
+      cargo build --locked --release --target $target -p wm-watcher
       ExitOnError
 
       Write-Output "Build completed successfully for target '$target'."
@@ -105,7 +126,7 @@ function BuildExes() {
 
 function BuildInstallers() {
   # WiX architectures to create installers for (x64 and arm64).
-  $wixArchs = @("x64", "arm64")
+  $wixArchs = if ($SkipArm64) { @("x64") } else { @("x64", "arm64") }
 
   foreach ($arch in $wixArchs) {
     Write-Output "Creating MSI installer ($arch)"
@@ -115,10 +136,18 @@ function BuildInstallers() {
       -d EXE_DIR="out/$arch"
   }
 
-  SignFiles @("out/installer-x64.msi", "out/installer-arm64.msi")
+  SignFiles @("out/installer-x64.msi")
+
+  if ($SkipArm64) {
+    Write-Output "Skipping universal installer because arm64 artifacts were skipped."
+    Return
+  }
+
+  SignFiles @("out/installer-arm64.msi")
 
   Write-Output "Creating universal installer"
   wix build -arch "x64" -ext WixToolset.BootstrapperApplications.wixext `
+    -ext WixToolset.Util.wixext `
     -out "./out/unsigned-installer-universal.exe" "./resources/wix/bundle.wxs" `
     -d VERSION_NUMBER="$VersionNumber"
 
@@ -139,7 +168,10 @@ function Package() {
   Write-Output "Creating output directory"
   New-Item -ItemType Directory -Force -Path "out"
 
-  DownloadZebarInstallers
+  # Zebar MSIs are only needed by the universal installer.
+  if (!$SkipArm64) {
+    DownloadZebarInstallers
+  }
   BuildExes
   BuildInstallers
 }
