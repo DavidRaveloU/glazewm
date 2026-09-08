@@ -202,11 +202,24 @@ fn create_window(
     .floating
     .centered;
 
+  // The target workspace may differ from the window's current workspace
+  // when a window is moved between monitors, so force centering in that
+  // case regardless of the `centered` option.
+  let is_same_workspace = nearest_workspace.id() == target_workspace.id();
+
+  // Pre-existing floating windows on their current workspace shouldn't be
+  // repositioned or resized when the WM starts up. Only newly created
+  // windows should be centered according to the `centered` default.
+  let preserves_placement = state.is_starting_up
+    && is_same_workspace
+    && matches!(&window_state, WindowState::Floating(_));
+
   // Calculate where window should be placed when floating is enabled. Use
   // the original width/height of the window and optionally position it in
   // the center of the workspace.
-  let is_same_workspace = nearest_workspace.id() == target_workspace.id();
-  let floating_placement = {
+  let floating_placement = if preserves_placement {
+    native_properties.frame.clone()
+  } else {
     let placement = if !is_same_workspace || prefers_centered {
       native_properties
         .frame
@@ -252,7 +265,7 @@ fn create_window(
       border_delta,
       None,
       floating_placement,
-      !prefers_centered,
+      !prefers_centered || preserves_placement,
       Vec::new(),
       None,
       None,

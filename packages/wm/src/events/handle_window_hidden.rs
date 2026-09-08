@@ -46,7 +46,11 @@ pub fn handle_window_hidden(
       || window.display_state() == DisplayState::Shown)
       && !window.native().is_visible().unwrap_or(false)
     {
-      unmanage_window(window, state)?;
+      unmanage_window(
+      window,
+      state,
+      config.value.general.focus_restore_on_floating_close,
+    )?;
     }
   }
 

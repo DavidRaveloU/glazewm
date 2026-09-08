@@ -1,15 +1,46 @@
 use anyhow::Context;
-use wm_common::{WindowState, WmEvent};
+use wm_common::{FocusRestoreTarget, WindowState, WmEvent};
 
 use crate::{
   commands::container::{
     detach_container, flatten_child_split_containers,
     set_focused_descendant,
   },
-  models::WindowContainer,
+  models::{Container, WindowContainer},
   traits::{CommonGetters, WindowGetters},
   wm_state::WmState,
 };
+
+/// Gets the container to focus after the given window is removed.
+///
+/// Floating windows honor the configured `FocusRestoreTarget`; other
+/// window states fall back to the classic behavior which prefers a window
+/// of the same state.
+fn restore_focus_target(
+  removed_window: &WindowContainer,
+  state: &WmState,
+  restore_target: FocusRestoreTarget,
+) -> Option<Container> {
+  let focus_target = match removed_window.state() {
+    WindowState::Floating(_) => {
+      WmState::floating_close_focus_target(removed_window, restore_target)
+    }
+    _ => state.focus_target_after_removal(removed_window),
+  };
+
+  tracing::info!(
+    "Focus restore | removed={} | state={:?} | option={:?} | target_id={}",
+    removed_window,
+    removed_window.state(),
+    restore_target,
+    focus_target
+      .as_ref()
+      .map(|target| target.id().to_string())
+      .unwrap_or_else(|| "none".to_string()),
+  );
+
+  focus_target
+}
 
 /// Detaches a closing window from the container tree and reflows its
 /// siblings without removing the active close animation.
@@ -19,13 +50,15 @@ use crate::{
 /// animation state is intentionally preserved here because
 /// `AnimationManager::update_internal` continues driving the surrogate and
 /// sends `WM_CLOSE` once the animation completes.
+#[allow(clippy::needless_pass_by_value)]
 #[cfg(target_os = "windows")]
 pub fn detach_window_for_close(
   window: WindowContainer,
   state: &mut WmState,
+  restore_target: FocusRestoreTarget,
 ) -> anyhow::Result<()> {
   let ancestors = window.ancestors().take(3).collect::<Vec<_>>();
-  let focus_target = state.focus_target_after_removal(&window.clone());
+  let focus_target = restore_focus_target(&window, state, restore_target);
 
   detach_container(window.clone().into())?;
 
@@ -69,12 +102,13 @@ pub fn detach_window_for_close(
 pub fn unmanage_window(
   window: WindowContainer,
   state: &mut WmState,
+  restore_target: FocusRestoreTarget,
 ) -> anyhow::Result<()> {
   // Create iterator of parent, grandparent, and great-grandparent.
   let ancestors = window.ancestors().take(3).collect::<Vec<_>>();
 
   // Get container to switch focus to after the window has been removed.
-  let focus_target = state.focus_target_after_removal(&window.clone());
+  let focus_target = restore_focus_target(&window, state, restore_target);
 
   detach_container(window.clone().into())?;
 

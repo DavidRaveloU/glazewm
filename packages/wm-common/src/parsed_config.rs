@@ -105,6 +105,22 @@ pub struct GeneralConfig {
 
   /// Affects which windows get shown in the native Windows taskbar.
   pub show_all_in_taskbar: bool,
+
+  /// Which window to focus after the focused floating window is closed.
+  pub focus_restore_on_floating_close: FocusRestoreTarget,
+
+  /// Whether to restore tiling windows to their previous position and
+  /// size when the WM exits.
+  #[serde(default = "restore_window_placement_on_exit_default")]
+  pub restore_window_placement_on_exit: bool,
+}
+
+/// Default value for
+/// [`GeneralConfig::restore_window_placement_on_exit`].
+///
+/// Tiling windows are restored to their pre-tiling placement by default.
+fn restore_window_placement_on_exit_default() -> bool {
+  true
 }
 
 impl Default for GeneralConfig {
@@ -129,8 +145,23 @@ impl Default for GeneralConfig {
         }
       },
       show_all_in_taskbar: false,
+      focus_restore_on_floating_close: FocusRestoreTarget::None,
+      restore_window_placement_on_exit: true,
     }
   }
+}
+
+/// Which window to focus after the focused floating window is closed.
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum FocusRestoreTarget {
+  /// Leave focus untouched; the OS decides what's focused next.
+  #[default]
+  None,
+  /// Focus the most recently focused floating window.
+  Floating,
+  /// Focus the most recently focused tiling window.
+  Tiling,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
@@ -634,6 +665,9 @@ pub struct WindowOpenConfig {
   /// - `none` / `fade`: no slide; combine with `opacity_from` for a pure
   ///   fade-in.
   /// - `zoom`: zoom in from the window center.
+  ///
+  /// Accepts the legacy `direction` key as an alias.
+  #[serde(alias = "direction")]
   pub style: WindowTransitionStyle,
   /// Starting opacity (0.0–1.0). At `1.0` no fade is applied; at `0.0` the
   /// window fades in from fully transparent. Can be combined with any style.

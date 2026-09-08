@@ -63,7 +63,11 @@ impl UserConfig {
   fn read(
     config_path: &PathBuf,
   ) -> anyhow::Result<(ParsedConfig, String)> {
-    if !config_path.exists() {
+    if config_path.exists() {
+      // Insert option keys added by newer versions without touching
+      // existing user values.
+      crate::config_migration::migrate_if_needed(config_path, SAMPLE_CONFIG);
+    } else {
       Self::create_sample(config_path)?;
     }
 

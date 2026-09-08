@@ -48,6 +48,7 @@ fn drag_modifier(modifier: &GrabAndMoveModifier) -> DragModifier {
 
 mod animation;
 mod commands;
+mod config_migration;
 mod events;
 mod ipc_server;
 mod models;

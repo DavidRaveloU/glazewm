@@ -27,6 +27,9 @@ pub fn reload_config(
   // Re-evaluate user config file and set its values in state.
   config.reload()?;
 
+  state.restore_window_placement_on_exit =
+    config.value.general.restore_window_placement_on_exit;
+
   // Re-run window rules on all active windows.
   for window in state.windows() {
     window.set_done_window_rules(Vec::new());

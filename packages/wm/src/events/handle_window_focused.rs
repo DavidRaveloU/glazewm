@@ -37,9 +37,20 @@ pub fn handle_window_focused(
   // close/minimize. This will cause focus to briefly flicker to the OS
   // focus target and then to the WM's focus target.
   if should_override_focus(state) {
+    tracing::info!(
+      "Overriding OS focus (recent unmanage), queued focus change. \
+       trigger native window id: {}",
+      native_window.id().0
+    );
     state.pending_sync.queue_focus_change();
     return Ok(());
   }
+
+  tracing::info!(
+    "OS focus event accepted | native id: {} | is_focus_synced: {}",
+    native_window.id().0,
+    state.is_focus_synced,
+  );
 
   // Ignore the focus event if window is being hidden by the WM.
   if let Some(window) = &found_window {

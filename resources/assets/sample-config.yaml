@@ -180,6 +180,22 @@ general:
   # - 'false': Only show windows from the currently shown workspaces.
   show_all_in_taskbar: false
 
+  # Which window to focus after closing a floating window. By default,
+  # nothing is sent to the front: the window is simply closed and focus is
+  # decided by the OS based on how the windows were stacked.
+  # - 'none': (default) Do not send any window to the front.
+  # - 'floating': Send the most recently focused floating window to the front.
+  # - 'tiling': Send the most recently focused tiling window to the front.
+  focus_restore_on_floating_close: "none"
+
+  # Whether tiling windows are restored to their previous size and position
+  # when GlazeWM exits (i.e. the window returns to where it was before it
+  # entered the tiling layout). Same recovery as pressing `toggle-floating`
+  # on each tiling window.
+  # - true: (default) Restore size and position on exit.
+  # - false: Leave tiling windows where the tiling layout placed them.
+  restore_window_placement_on_exit: true
+
 gaps:
   # Whether to scale the gaps with the DPI of the monitor.
   scale_with_dpi: true

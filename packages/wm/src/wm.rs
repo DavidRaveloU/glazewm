@@ -76,6 +76,8 @@ impl WindowManager {
       animation_tick_tx,
     );
     state.populate(config)?;
+    state.restore_window_placement_on_exit =
+      config.value.general.restore_window_placement_on_exit;
 
     // Start animation timer if `populate` created any animations. This
     // mirrors the `ensure_timer_running` call at the end of `process_event`
@@ -155,7 +157,11 @@ impl WindowManager {
           handle_window_title_changed(&window, state, config)
         }
         WindowEvent::Destroyed { window_id, .. } => {
-          handle_window_destroyed(window_id, state)
+          handle_window_destroyed(
+            window_id,
+            state,
+            config.value.general.focus_restore_on_floating_close,
+          )
         }
       },
     }?;
@@ -417,7 +423,11 @@ impl WindowManager {
                   .has_close_animation(&window_id)
                 {
                   let _ = window.native().set_cloaked(true);
-                  detach_window_for_close(window, state)?;
+                  detach_window_for_close(
+                    window,
+                    state,
+                    config.value.general.focus_restore_on_floating_close,
+                  )?;
                   return Ok(());
                 }
               }

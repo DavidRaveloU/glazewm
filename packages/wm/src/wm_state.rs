@@ -4,7 +4,9 @@ use anyhow::Context;
 use tokio::sync::mpsc::{self};
 use tracing::warn;
 use uuid::Uuid;
-use wm_common::{BindingModeConfig, HideCorner, WindowState, WmEvent};
+use wm_common::{
+  BindingModeConfig, FocusRestoreTarget, HideCorner, WindowState, WmEvent,
+};
 use wm_platform::{
   Direction, Dispatcher, Display, NativeWindow, Point, Rect,
 };
@@ -74,6 +76,19 @@ pub struct WmState {
   /// Whether the OS focused window is the same as the WM focused window.
   pub is_focus_synced: bool,
 
+  /// Whether the initial set of windows is being populated at startup.
+  ///
+  /// Used to preserve the placement of pre-existing floating windows
+  /// instead of re-centering them like newly opened windows.
+  pub is_starting_up: bool,
+
+  /// Whether tiling windows should be restored to their pre-tiling
+  /// position and size when the WM exits.
+  ///
+  /// Mirrors `GeneralConfig::restore_window_placement_on_exit`, cached on
+  /// the state so `Drop` can apply it without borrowing the config.
+  pub restore_window_placement_on_exit: bool,
+
   /// Whether the initial state has been populated.
   has_initialized: bool,
 
@@ -104,6 +119,8 @@ impl WmState {
       ignored_windows: Vec::new(),
       is_paused: false,
       is_focus_synced: false,
+      is_starting_up: false,
+      restore_window_placement_on_exit: false,
       has_initialized: false,
       event_tx,
       exit_tx,
@@ -133,6 +150,7 @@ impl WmState {
 
     // Manage windows in reverse z-order (bottom to top). This helps to
     // preserve the original stacking order.
+    self.is_starting_up = true;
     for native_window in
       self.dispatcher.visible_windows()?.into_iter().rev()
     {
@@ -149,6 +167,7 @@ impl WmState {
         )?;
       }
     }
+    self.is_starting_up = false;
 
     let container_to_focus = focused_window
       .and_then(|focused_window| {
@@ -687,6 +706,38 @@ impl WmState {
       .or(Some(workspace.into()))
   }
 
+  /// Gets container to focus after the given floating window is removed,
+  /// based on the configured `FocusRestoreTarget`.
+  ///
+  /// `Floating` and `Tiling` pick the most recently focused window of that
+  /// state, while `None` leaves focus untouched (letting the OS decide).
+  pub fn floating_close_focus_target(
+    removed_window: &WindowContainer,
+    restore_target: FocusRestoreTarget,
+  ) -> Option<Container> {
+    match restore_target {
+      FocusRestoreTarget::None => None,
+      FocusRestoreTarget::Floating | FocusRestoreTarget::Tiling => {
+        let is_floating_target =
+          matches!(restore_target, FocusRestoreTarget::Floating);
+
+        let workspace = removed_window.workspace()?;
+        let focus_target = workspace
+          .descendant_focus_order()
+          .filter(|descendant| descendant.id() != removed_window.id())
+          .filter_map(|descendant| descendant.as_window_container().ok())
+          .find(|window| {
+            matches!(
+              window.state(),
+              WindowState::Floating(_) if is_floating_target
+            ) || matches!(window.state(), WindowState::Tiling if !is_floating_target)
+          })
+          .map(Into::into);
+        focus_target
+      }
+    }
+  }
+
   /// Returns all containers that contain the given point.
   #[allow(clippy::unused_self)]
   pub fn containers_at_point(
@@ -732,7 +783,7 @@ impl WmState {
 
     for window in invalid_windows {
       tracing::info!("Removing invalid window: {}", window);
-      unmanage_window(window, self)?;
+      unmanage_window(window, self, FocusRestoreTarget::Floating)?;
     }
 
     // Prune ignored windows that are no longer valid.
@@ -760,7 +811,19 @@ impl Drop for WmState {
     for window in &managed_windows {
       // Redraw windows to their intended positions. On macOS, this will
       // unhide windows that are on other workspaces.
-      if let Ok(rect) = window.to_rect() {
+      //
+      // Tiling windows are restored to their pre-tiling placement when
+      // `restore_window_placement_on_exit` is enabled, mirroring the
+      // position/size recovery of the `toggle-floating` command.
+      let rect = if self.restore_window_placement_on_exit
+        && window.state() == WindowState::Tiling
+      {
+        Some(window.floating_placement())
+      } else {
+        window.to_rect().ok()
+      };
+
+      if let Some(rect) = rect {
         if let Err(err) = window.native().set_frame(&rect) {
           warn!("Failed to redraw window on cleanup: {:?}", err);
         }
