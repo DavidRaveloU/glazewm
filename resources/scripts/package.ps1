@@ -64,21 +64,34 @@ function DownloadZebarInstallers() {
   if ($env:GITHUB_TOKEN) {
     $headers["Authorization"] = "Bearer $env:GITHUB_TOKEN"
   }
-  $latestInstallers = Invoke-RestMethod $latestRelease -Headers $headers | % assets | ? name -like "*.msi"
 
-  $latestInstallers | ForEach-Object {
-    $outFile = Join-Path "out" $_.name
-
-    # Rename the MSI files (e.g. `zebar-1.5.0-opt1-x64.msi` -> `zebar-x64.msi`).
-    if ($_.name -like "*-x64.msi") {
-      $outFile = "out/zebar-x64.msi"
-    }
-    elseif ($_.name -like "*-arm64.msi") {
-      $outFile = "out/zebar-arm64.msi"
-    }
-
-    Invoke-WebRequest $_.browser_download_url -OutFile $outFile -Headers $headers
+  try {
+    $latestInstallers = Invoke-RestMethod $latestRelease -Headers $headers | % assets | ? name -like "*.msi"
+  } catch {
+    Write-Output "Warning: Failed to fetch Zebar releases: $_"
+    return $false
   }
+
+  try {
+    $latestInstallers | ForEach-Object {
+      $outFile = Join-Path "out" $_.name
+
+      # Rename the MSI files (e.g. `zebar-1.5.0-opt1-x64.msi` -> `zebar-x64.msi`).
+      if ($_.name -like "*-x64.msi") {
+        $outFile = "out/zebar-x64.msi"
+      }
+      elseif ($_.name -like "*-arm64.msi") {
+        $outFile = "out/zebar-arm64.msi"
+      }
+
+      Invoke-WebRequest $_.browser_download_url -OutFile $outFile -Headers $headers
+    }
+  } catch {
+    Write-Output "Warning: Failed to download Zebar installers: $_"
+    return $false
+  }
+
+  return $true
 }
 
 function BuildExes() {
@@ -128,7 +141,7 @@ function BuildExes() {
   }
 }
 
-function BuildInstallers() {
+function BuildInstallers($hasZebar) {
   # WiX architectures to create installers for (x64 and arm64).
   $wixArchs = if ($SkipArm64) { @("x64") } else { @("x64", "arm64") }
 
@@ -144,6 +157,11 @@ function BuildInstallers() {
 
   if ($SkipArm64) {
     Write-Output "Skipping universal installer because arm64 artifacts were skipped."
+    Return
+  }
+
+  if (!$hasZebar) {
+    Write-Output "Skipping universal installer because Zebar MSIs could not be downloaded."
     Return
   }
 
@@ -173,11 +191,12 @@ function Package() {
   New-Item -ItemType Directory -Force -Path "out"
 
   # Zebar MSIs are only needed by the universal installer.
+  $hasZebar = $true
   if (!$SkipArm64) {
-    DownloadZebarInstallers
+    $hasZebar = DownloadZebarInstallers
   }
   BuildExes
-  BuildInstallers
+  BuildInstallers $hasZebar
 }
 
 Package
