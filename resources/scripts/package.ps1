@@ -60,7 +60,11 @@ function DownloadZebarInstallers() {
   Write-Output "Downloading latest Zebar MSI's"
 
   $latestRelease = 'https://api.github.com/repos/glzr-io/zebar/releases/latest'
-  $latestInstallers = Invoke-RestMethod $latestRelease | % assets | ? name -like "*.msi"
+  $headers = @{}
+  if ($env:GITHUB_TOKEN) {
+    $headers["Authorization"] = "Bearer $env:GITHUB_TOKEN"
+  }
+  $latestInstallers = Invoke-RestMethod $latestRelease -Headers $headers | % assets | ? name -like "*.msi"
 
   $latestInstallers | ForEach-Object {
     $outFile = Join-Path "out" $_.name
@@ -73,7 +77,7 @@ function DownloadZebarInstallers() {
       $outFile = "out/zebar-arm64.msi"
     }
 
-    Invoke-WebRequest $_.browser_download_url -OutFile $outFile
+    Invoke-WebRequest $_.browser_download_url -OutFile $outFile -Headers $headers
   }
 }
 
