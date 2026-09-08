@@ -115,7 +115,8 @@ fn merge_config(
   // valid. When multiple blocks share an anchor (e.g. sibling keys spliced
   // into the same section end), the first-collected block must be applied
   // last so the file ends up in sample order.
-  insertions.sort_by_key(|(index, seq, _)| (Reverse(*index), Reverse(*seq)));
+  insertions
+    .sort_by_key(|(index, seq, _)| (Reverse(*index), Reverse(*seq)));
 
   let mut lines = user_lines
     .into_iter()
@@ -144,8 +145,8 @@ fn merge_config(
 
   // Validate the merged document and ensure the migration is complete
   // before writing anything to disk.
-  let merged_value: Value =
-    serde_yaml::from_str(&merged).context("Merged config failed to parse.")?;
+  let merged_value: Value = serde_yaml::from_str(&merged)
+    .context("Merged config failed to parse.")?;
   if !merged_value.is_mapping() {
     bail!("Merged config is not a YAML mapping.");
   }
@@ -211,11 +212,7 @@ fn collect_insertions(
         user_blocks[parent].end + 1
       };
 
-      insertions.push((
-        anchor,
-        insertions.len(),
-        block_text,
-      ));
+      insertions.push((anchor, insertions.len(), block_text));
     }
   }
 }
@@ -229,9 +226,10 @@ fn collect_insertions(
 fn scan_blocks(
   document: &str,
 ) -> (HashMap<Vec<String>, Block>, Vec<&str>) {
-  // Split on `\n` (keeping the trailing empty element from a final newline)
-  // and drop a single trailing `\r` so CRLF documents aren't double
-  // converted further down (which would produce `\r\r\n` line endings).
+  // Split on `\n` (keeping the trailing empty element from a final
+  // newline) and drop a single trailing `\r` so CRLF documents aren't
+  // double converted further down (which would produce `\r\r\n` line
+  // endings).
   let lines = document
     .split('\n')
     .map(|line| line.strip_suffix('\r').unwrap_or(line))
@@ -267,10 +265,7 @@ fn scan_blocks(
 
     if let Some(key_name) = parse_key_line(trimmed) {
       // Close any open block that this key isn't nested within.
-      while stack
-        .last()
-        .is_some_and(|open| open.indent >= indent)
-      {
+      while stack.last().is_some_and(|open| open.indent >= indent) {
         let open = stack.pop().expect("Non-empty stack.");
         let raw_end = pending_comment_start.unwrap_or(index) - 1;
         blocks.insert(
@@ -289,7 +284,11 @@ fn scan_blocks(
       path.push(key_name);
 
       let start = pending_comment_start.unwrap_or(index);
-      stack.push(OpenBlock { path, indent, start });
+      stack.push(OpenBlock {
+        path,
+        indent,
+        start,
+      });
       pending_comment_start = None;
       continue;
     }
@@ -379,7 +378,11 @@ keybindings:
   - commands: ['wm-exit']
     bindings: ['alt+shift+e']
 ";
-    let merged = merge_config(user_config, include_str!("../../../resources/assets/sample-config.yaml")).unwrap();
+    let merged = merge_config(
+      user_config,
+      include_str!("../../../resources/assets/sample-config.yaml"),
+    )
+    .unwrap();
     let merged_value: Value =
       serde_yaml::from_str(&merged).expect("merged config should parse");
 
@@ -402,7 +405,11 @@ keybindings:
   #[test]
   fn merges_missing_top_level_section() {
     let user_config = "general:\n  focus_follows_cursor: true\n";
-    let merged = merge_config(user_config, include_str!("../../../resources/assets/sample-config.yaml")).unwrap();
+    let merged = merge_config(
+      user_config,
+      include_str!("../../../resources/assets/sample-config.yaml"),
+    )
+    .unwrap();
     let merged_value: Value =
       serde_yaml::from_str(&merged).expect("merged config should parse");
 
@@ -417,7 +424,11 @@ keybindings:
     let user_config = r"gaps:
   inner_gap: '99px'
 ";
-    let merged = merge_config(user_config, include_str!("../../../resources/assets/sample-config.yaml")).unwrap();
+    let merged = merge_config(
+      user_config,
+      include_str!("../../../resources/assets/sample-config.yaml"),
+    )
+    .unwrap();
 
     assert!(merged.contains("inner_gap: '99px'"));
   }
@@ -441,7 +452,9 @@ keybindings:
 
     assert!(merged.ends_with("\r\n"));
     assert!(!merged.contains("\r\r\n"));
-    assert!(merged.contains("focus_restore_on_floating_close: \"none\"\r\n"));
+    assert!(
+      merged.contains("focus_restore_on_floating_close: \"none\"\r\n")
+    );
   }
 
   /// Sibling keys spliced into the same section end keep sample order.
