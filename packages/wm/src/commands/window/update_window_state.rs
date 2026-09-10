@@ -29,6 +29,13 @@ pub fn update_window_state(
     return Ok(window);
   }
 
+  tracing::warn!(
+    "[ALT-F] STATE_CHANGE window=\"{}\" old={:?} -> new={:?}",
+    window,
+    window.state(),
+    target_state,
+  );
+
   // Mark for state-change animation so `platform_sync` allows a `window_move`
   // animation across the tiling/floating boundary for this window.
   state.pending_sync.mark_window_state_change(window.id());

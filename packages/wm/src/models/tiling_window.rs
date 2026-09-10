@@ -98,7 +98,7 @@ impl TilingWindow {
     NonTilingWindow::new(
       Some(self.id()),
       self.native().clone(),
-      self.native_properties().clone(),
+      self.native_properties(),
       state,
       Some(WindowState::Tiling),
       self.border_delta(),

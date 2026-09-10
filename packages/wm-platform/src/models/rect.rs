@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{Direction, LengthValue, Point, RectDelta};
 
-#[derive(Debug, Deserialize, Clone, Serialize, Eq, PartialEq)]
+#[derive(Debug, Deserialize, Clone, Copy, Serialize, Eq, PartialEq)]
 pub enum Corner {
   TopLeft,
   TopRight,
@@ -10,7 +10,7 @@ pub enum Corner {
   BottomRight,
 }
 
-#[derive(Debug, Deserialize, Clone, Serialize, Eq, PartialEq)]
+#[derive(Debug, Deserialize, Clone, Copy, Serialize, Eq, PartialEq)]
 pub struct Rect {
   /// X-coordinate of the left edge of the rectangle.
   pub left: i32,

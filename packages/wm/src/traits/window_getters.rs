@@ -232,7 +232,7 @@ macro_rules! impl_window_getters {
       }
 
       fn display_state(&self) -> DisplayState {
-        self.0.borrow().display_state.clone()
+        self.0.borrow().display_state
       }
 
       fn set_display_state(&self, display_state: DisplayState) {

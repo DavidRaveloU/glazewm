@@ -105,7 +105,7 @@ impl NonTilingWindow {
     TilingWindow::new(
       Some(self.id()),
       self.native().clone(),
-      self.native_properties().clone(),
+      self.native_properties(),
       prev_state,
       self.border_delta(),
       self.floating_placement(),
@@ -153,12 +153,20 @@ impl_window_getters!(NonTilingWindow);
 impl PositionGetters for NonTilingWindow {
   fn to_rect(&self) -> anyhow::Result<Rect> {
     match self.state() {
-      WindowState::Fullscreen(_) => {
+      WindowState::Fullscreen(fullscreen) => {
         let monitor = self.monitor().context("No monitor.")?;
 
         #[cfg(target_os = "windows")]
         {
-          monitor.to_rect()
+          // Natively maximized windows occupy the monitor's working area
+          // (the taskbar stays visible), so use that so the workspace-switch
+          // surrogates and repositions land exactly where the window is.
+          // Non-maximized fullscreen windows cover the full monitor bounds.
+          if fullscreen.maximized {
+            Ok(monitor.native_properties().working_area)
+          } else {
+            monitor.to_rect()
+          }
         }
         #[cfg(target_os = "macos")]
         {

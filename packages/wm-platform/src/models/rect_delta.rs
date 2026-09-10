@@ -62,19 +62,19 @@ impl RectDelta {
     RectDelta::new(
       LengthValue {
         amount: -self.left.amount,
-        unit: self.left.unit.clone(),
+        unit: self.left.unit,
       },
       LengthValue {
         amount: -self.top.amount,
-        unit: self.top.unit.clone(),
+        unit: self.top.unit,
       },
       LengthValue {
         amount: -self.right.amount,
-        unit: self.right.unit.clone(),
+        unit: self.right.unit,
       },
       LengthValue {
         amount: -self.bottom.amount,
-        unit: self.bottom.unit.clone(),
+        unit: self.bottom.unit,
       },
     )
   }

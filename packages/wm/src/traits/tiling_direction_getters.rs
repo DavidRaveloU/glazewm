@@ -61,7 +61,7 @@ macro_rules! impl_tiling_direction_getters {
   ($struct_name:ident) => {
     impl TilingDirectionGetters for $struct_name {
       fn tiling_direction(&self) -> TilingDirection {
-        self.0.borrow().tiling_direction.clone()
+        self.0.borrow().tiling_direction
       }
 
       fn set_tiling_direction(&self, tiling_direction: TilingDirection) {

@@ -40,6 +40,7 @@ pub fn handle_window_moved_or_resized_end(
 
   match &window {
     WindowContainer::NonTilingWindow(window) => {
+      let was_maximized = window.native_properties().is_maximized;
       let is_maximized = try_warn!(window.native().is_maximized());
 
       window.update_native_properties(|properties| {
@@ -50,11 +51,24 @@ pub fn handle_window_moved_or_resized_end(
         .nearest_monitor(&window.native())
         .context("Failed to get workspace of nearest monitor.")?;
 
-      let should_fullscreen = window.should_fullscreen(
-        &nearest_monitor
-          .displayed_workspace()
-          .context("No workspace.")?,
-      )?;
+      let workspace = nearest_monitor
+        .displayed_workspace()
+        .context("No workspace.")?;
+
+      let mut should_fullscreen = window.should_fullscreen(&workspace)?;
+
+      // When a window leaves a native maximized state, its frame can lag
+      // behind, still spanning the workspace bounds. Suppress the fullscreen
+      // check in that case to avoid falsely promoting the window to
+      // fullscreen before it is repositioned.
+      let just_unmaximized = was_maximized && !is_maximized;
+      if just_unmaximized && should_fullscreen {
+        tracing::warn!(
+          "[ALT-F] Suppressed fullscreen after exiting native maximized state window={:?}.",
+          window.id(),
+        );
+        should_fullscreen = false;
+      }
 
       if is_maximized || should_fullscreen {
         let fullscreen_state = if let WindowState::Fullscreen(

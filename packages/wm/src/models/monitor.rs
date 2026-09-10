@@ -105,6 +105,8 @@ impl Monitor {
       .map(CommonGetters::to_dto)
       .try_collect()?;
 
+    let native_properties = self.native_properties();
+
     Ok(ContainerDto::Monitor(MonitorDto {
       id: self.id(),
       parent_id: self.parent().map(|parent| parent.id()),
@@ -115,22 +117,22 @@ impl Monitor {
       height: rect.height(),
       x: rect.x(),
       y: rect.y(),
-      dpi: self.native_properties().dpi,
-      scale_factor: self.native_properties().scale_factor,
+      dpi: native_properties.dpi,
+      scale_factor: native_properties.scale_factor,
       #[cfg(target_os = "windows")]
-      handle: Some(self.native_properties().handle),
+      handle: Some(native_properties.handle),
       #[cfg(not(target_os = "windows"))]
       handle: None,
-      device_name: self.native_properties().device_name,
+      device_name: native_properties.device_name,
       #[cfg(target_os = "windows")]
-      device_path: self.native_properties().device_path,
+      device_path: native_properties.device_path,
       #[cfg(not(target_os = "windows"))]
       device_path: None,
       #[cfg(target_os = "windows")]
-      hardware_id: self.native_properties().hardware_id,
+      hardware_id: native_properties.hardware_id,
       #[cfg(not(target_os = "windows"))]
       hardware_id: None,
-      working_rect: self.native_properties().working_area,
+      working_rect: native_properties.working_area,
     }))
   }
 }

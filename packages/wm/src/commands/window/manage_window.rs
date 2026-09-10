@@ -1,6 +1,8 @@
 use anyhow::Context;
 use tracing::info;
-use wm_common::{try_warn, WindowRuleEvent, WindowState, WmEvent};
+use wm_common::{
+  try_warn, FullscreenStateConfig, WindowRuleEvent, WindowState, WmEvent,
+};
 use wm_platform::NativeWindow;
 #[cfg(target_os = "windows")]
 use wm_platform::NativeWindowWindowsExt;
@@ -292,7 +294,10 @@ fn create_window(
 
 /// Gets the initial state for a window based on its native state.
 ///
-/// Note that maximized windows are initialized as tiling.
+/// Note that natively maximized windows initialized as tiling are left as
+/// tiling so they get placed in the workspace mosaic. Maximized windows
+/// initialized as floating are instead marked as maximized fullscreen so
+/// the WM doesn't unmaximize and reposition them at startup.
 fn window_state_to_create(
   native_properties: &NativeWindowProperties,
   nearest_monitor: &Monitor,
@@ -305,6 +310,17 @@ fn window_state_to_create(
   let nearest_workspace = nearest_monitor
     .displayed_workspace()
     .context("No workspace.")?;
+
+  let workspace_rect = nearest_workspace.max_workspace_rect()?;
+
+  tracing::warn!(
+    "[ALT-F] STARTUP state_to_create title=\"{}\" is_maximized={} is_minimized={} frame={:?} workspace={:?}",
+    native_properties.title,
+    native_properties.is_maximized,
+    native_properties.is_minimized,
+    native_properties.frame,
+    workspace_rect,
+  );
 
   // Only initialize as fullscreen if the window *exceeds* the workspace
   // bounds (due to the 1px inset).
@@ -319,6 +335,12 @@ fn window_state_to_create(
       .inset(1)
       .contains_rect(&nearest_workspace.max_workspace_rect()?)
   {
+    tracing::warn!(
+      "[ALT-F] STARTUP -> Fullscreen! title=\"{}\" frame.inset(1)={:?} workspace={:?}",
+      native_properties.title,
+      native_properties.frame.inset(1),
+      workspace_rect,
+    );
     return Ok(WindowState::Fullscreen(
       config
         .value
@@ -336,7 +358,31 @@ fn window_state_to_create(
     ));
   }
 
-  Ok(WindowState::default_from_config(&config.value))
+  let default_state = WindowState::default_from_config(&config.value);
+
+  // A natively maximized window initialized as floating should remain
+  // maximized rather than being unmaximized and repositioned at startup.
+  // Otherwise, the frame left over from the maximized state can falsely
+  // mark the window as fullscreen.
+  if native_properties.is_maximized
+    && matches!(default_state, WindowState::Floating(_))
+  {
+    tracing::warn!(
+      "[ALT-F] STARTUP -> Fullscreen(maximized) title=\"{}\".",
+      native_properties.title,
+    );
+    return Ok(WindowState::Fullscreen(FullscreenStateConfig {
+      maximized: true,
+      ..config
+        .value
+        .window_behavior
+        .state_defaults
+        .fullscreen
+        .clone()
+    }));
+  }
+
+  Ok(default_state)
 }
 
 /// Gets where to insert a new window in the container tree.
